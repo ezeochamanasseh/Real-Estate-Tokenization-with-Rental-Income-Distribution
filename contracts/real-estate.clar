@@ -96,3 +96,14 @@
                     (not (default-to false (map-get? property-status property-id))))
                 (ok true))
             err-owner-only)))
+
+
+(define-map maintenance-funds uint uint)
+
+(define-public (add-maintenance-fund (property-id uint) (amount uint))
+    (let ((current-fund (default-to u0 (map-get? maintenance-funds property-id))))
+        (if (is-eq tx-sender contract-owner)
+            (begin
+                (map-set maintenance-funds property-id (+ current-fund amount))
+                (ok true))
+            err-owner-only)))
