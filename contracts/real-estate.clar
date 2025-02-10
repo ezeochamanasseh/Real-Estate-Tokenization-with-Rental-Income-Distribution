@@ -124,3 +124,18 @@
                     new-price)
                 (ok true))
             err-owner-only)))
+
+
+
+(define-map property-ratings 
+    { property-id: uint, rater: principal } 
+    uint)
+
+(define-public (rate-property (property-id uint) (rating uint))
+    (if (<= rating u5)
+        (begin
+            (map-set property-ratings 
+                { property-id: property-id, rater: tx-sender }
+                rating)
+            (ok true))
+        err-invalid-amount))
