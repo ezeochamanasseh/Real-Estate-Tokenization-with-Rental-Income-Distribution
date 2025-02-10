@@ -81,3 +81,18 @@
                     (+ (get-token-balance property-id recipient) amount))
                 (ok true))
             err-invalid-amount)))
+
+
+
+
+(define-map property-status uint bool)  ;; true = listed, false = unlisted
+
+(define-public (toggle-property-listing (property-id uint))
+    (let ((property (unwrap! (map-get? properties property-id) err-not-found)))
+        (if (is-eq tx-sender contract-owner)
+            (begin
+                (map-set property-status 
+                    property-id 
+                    (not (default-to false (map-get? property-status property-id))))
+                (ok true))
+            err-owner-only)))
