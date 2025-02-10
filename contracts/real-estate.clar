@@ -62,3 +62,22 @@
 (define-read-only (get-token-balance (property-id uint) (holder principal))
     (default-to u0
         (map-get? token-holdings { property-id: property-id, holder: holder })))
+
+
+
+
+(define-public (transfer-tokens (property-id uint) (recipient principal) (amount uint))
+    (let (
+        (sender-balance (get-token-balance property-id tx-sender))
+        (property (unwrap! (map-get? properties property-id) err-not-found))
+    )
+        (if (>= sender-balance amount)
+            (begin
+                (map-set token-holdings 
+                    { property-id: property-id, holder: tx-sender }
+                    (- sender-balance amount))
+                (map-set token-holdings 
+                    { property-id: property-id, holder: recipient }
+                    (+ (get-token-balance property-id recipient) amount))
+                (ok true))
+            err-invalid-amount)))
