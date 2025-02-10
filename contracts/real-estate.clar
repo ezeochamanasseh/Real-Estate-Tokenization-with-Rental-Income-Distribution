@@ -107,3 +107,20 @@
                 (map-set maintenance-funds property-id (+ current-fund amount))
                 (ok true))
             err-owner-only)))
+
+
+
+
+(define-map token-price-history 
+    { property-id: uint, timestamp: uint } 
+    uint)
+
+(define-public (update-token-price (property-id uint) (new-price uint))
+    (let ((property (unwrap! (map-get? properties property-id) err-not-found)))
+        (if (is-eq tx-sender contract-owner)
+            (begin
+                (map-set token-price-history 
+                    { property-id: property-id, timestamp: stacks-block-height }
+                    new-price)
+                (ok true))
+            err-owner-only)))
