@@ -139,3 +139,17 @@
                 rating)
             (ok true))
         err-invalid-amount))
+
+
+(define-map rental-income-history
+    { property-id: uint, distribution-date: uint }
+    uint)
+
+(define-public (record-rental-distribution (property-id uint) (amount uint))
+    (if (is-eq tx-sender contract-owner)
+        (begin
+            (map-set rental-income-history
+                { property-id: property-id, distribution-date: stacks-block-height }
+                amount)
+            (ok true))
+        err-owner-only))
