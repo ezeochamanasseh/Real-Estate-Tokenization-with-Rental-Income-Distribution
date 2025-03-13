@@ -153,3 +153,146 @@
                 amount)
             (ok true))
         err-owner-only))
+
+
+;; Define vote tracking
+(define-map property-votes 
+    { property-id: uint, proposal-id: uint }
+    { yes-votes: uint, no-votes: uint, end-height: uint })
+
+(define-map latest-proposal-ids uint uint)
+
+(define-read-only (get-latest-proposal-id (property-id uint))
+    (map-get? latest-proposal-ids property-id))
+
+(define-map voter-records
+    { property-id: uint, proposal-id: uint, voter: principal }
+    bool)
+
+(define-public (create-proposal (property-id uint) (end-blocks uint))
+    (let ((proposal-id (default-to u0 (get-latest-proposal-id property-id))))
+        (if (is-eq tx-sender contract-owner)
+            (begin
+                (map-set property-votes
+                    { property-id: property-id, proposal-id: (+ proposal-id u1) }
+                    { yes-votes: u0, 
+                      no-votes: u0, 
+                      end-height: (+ stacks-block-height end-blocks) })
+                (ok (+ proposal-id u1)))
+            err-owner-only)))
+
+(define-public (cast-vote (property-id uint) (proposal-id uint) (vote bool))
+    (let ((voter-weight (get-token-balance property-id tx-sender))
+          (current-votes (unwrap! (map-get? property-votes { property-id: property-id, proposal-id: proposal-id }) err-not-found)))
+        (if (> voter-weight u0)
+            (begin
+                (map-set voter-records
+                    { property-id: property-id, proposal-id: proposal-id, voter: tx-sender }
+                    vote)
+                (ok true))
+            err-invalid-amount)))
+
+
+(define-map maintenance-requests 
+    { property-id: uint, request-id: uint }
+    { requester: principal, description: (string-ascii 256), status: (string-ascii 20) })
+
+(define-data-var request-counter uint u0)
+
+(define-public (submit-maintenance-request (property-id uint) (description (string-ascii 256)))
+    (let ((request-id (var-get request-counter)))
+        (map-set maintenance-requests
+            { property-id: property-id, request-id: request-id }
+            { requester: tx-sender, 
+              description: description, 
+              status: "pending" })
+        (var-set request-counter (+ request-id u1))
+        (ok request-id)))
+
+(define-public (update-request-status (property-id uint) (request-id uint) (new-status (string-ascii 20)))
+    (if (is-eq tx-sender contract-owner)
+        (let ((request (unwrap! (map-get? maintenance-requests { property-id: property-id, request-id: request-id }) err-not-found)))
+            (map-set maintenance-requests
+                { property-id: property-id, request-id: request-id }
+                (merge request { status: new-status }))
+            (ok true))
+        err-owner-only))
+
+
+(define-map staking-positions
+    { property-id: uint, staker: principal }
+    { amount: uint, start-height: uint })
+
+(define-constant BLOCKS_PER_YEAR u52560)
+(define-constant REWARD_RATE u5) ;; 5% annual reward
+
+(define-public (stake-tokens (property-id uint) (amount uint))
+    (let ((balance (get-token-balance property-id tx-sender)))
+        (if (>= balance amount)
+            (begin
+                (map-set staking-positions
+                    { property-id: property-id, staker: tx-sender }
+                    { amount: amount, start-height: stacks-block-height })
+                (ok true))
+            err-invalid-amount)))
+
+(define-read-only (get-staking-rewards (property-id uint) (staker principal))
+    (let ((position (unwrap! (map-get? staking-positions { property-id: property-id, staker: staker }) err-not-found)))
+        (ok (/ (* (get amount position) REWARD_RATE (- stacks-block-height (get start-height position))) BLOCKS_PER_YEAR))))
+
+
+(define-map property-documents
+    { property-id: uint, doc-id: uint }
+    { name: (string-ascii 64), hash: (string-ascii 128), upload-height: uint })
+
+(define-data-var doc-counter uint u0)
+
+(define-public (add-document (property-id uint) (name (string-ascii 64)) (hash (string-ascii 128)))
+    (let ((doc-id (var-get doc-counter)))
+        (if (is-eq tx-sender contract-owner)
+            (begin
+                (map-set property-documents
+                    { property-id: property-id, doc-id: doc-id }
+                    { name: name, hash: hash, upload-height: stacks-block-height })
+                (var-set doc-counter (+ doc-id u1))
+                (ok doc-id))
+            err-owner-only)))
+
+
+(define-map property-metrics
+    uint
+    { total-rental-income: uint,
+      occupancy-rate: uint,
+      maintenance-costs: uint,
+      last-updated: uint })
+
+(define-public (update-property-metrics 
+    (property-id uint) 
+    (rental-income uint)
+    (occupancy-rate uint)
+    (maintenance-costs uint))
+    (if (is-eq tx-sender contract-owner)
+        (begin
+            (map-set property-metrics
+                property-id
+                { total-rental-income: rental-income,
+                  occupancy-rate: occupancy-rate,
+                  maintenance-costs: maintenance-costs,
+                  last-updated: stacks-block-height })
+            (ok true))
+        err-owner-only))
+
+
+(define-map rental-distribution-schedule
+    uint
+    { last-distribution: uint, distribution-interval: uint })
+
+(define-public (setup-rental-distribution (property-id uint) (interval uint))
+    (if (is-eq tx-sender contract-owner)
+        (begin
+            (map-set rental-distribution-schedule
+                property-id
+                { last-distribution: stacks-block-height, distribution-interval: interval })
+            (ok true))
+        err-owner-only))
+
