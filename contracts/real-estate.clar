@@ -296,3 +296,71 @@
             (ok true))
         err-owner-only))
 
+(define-map insurance-pools uint uint)
+(define-map insurance-claims 
+    { property-id: uint, claim-id: uint }
+    { claimant: principal, amount: uint, status: (string-ascii 20) })
+(define-data-var claim-counter uint u0)
+
+(define-public (contribute-to-insurance (property-id uint) (amount uint))
+    (let ((current-pool (default-to u0 (map-get? insurance-pools property-id))))
+        (begin
+            (map-set insurance-pools property-id (+ current-pool amount))
+            (ok true))))
+
+(define-public (submit-insurance-claim (property-id uint) (amount uint))
+    (let ((claim-id (var-get claim-counter))
+          (holder-tokens (get-token-balance property-id tx-sender))
+          (pool-balance (default-to u0 (map-get? insurance-pools property-id))))
+        (if (and (> holder-tokens u0) (<= amount pool-balance))
+            (begin
+                (map-set insurance-claims
+                    { property-id: property-id, claim-id: claim-id }
+                    { claimant: tx-sender, amount: amount, status: "pending" })
+                (var-set claim-counter (+ claim-id u1))
+                (ok claim-id))
+            err-invalid-amount)))
+
+
+
+
+(define-map auctions 
+    uint 
+    { seller: principal,
+      start-price: uint,
+      highest-bid: uint,
+      highest-bidder: (optional principal),
+      end-height: uint })
+
+(define-map auction-bids
+    { auction-id: uint, bidder: principal }
+    uint)
+
+(define-public (create-auction (property-id uint) (start-price uint) (duration uint))
+    (let ((token-balance (get-token-balance property-id tx-sender)))
+        (if (> token-balance u0)
+            (begin
+                (map-set auctions property-id
+                    { seller: tx-sender,
+                      start-price: start-price,
+                      highest-bid: start-price,
+                      highest-bidder: none,
+                      end-height: (+ stacks-block-height duration) })
+                (ok true))
+            err-invalid-amount)))
+
+(define-public (place-bid (property-id uint) (bid-amount uint))
+    (let ((auction (unwrap! (map-get? auctions property-id) err-not-found))
+          (current-highest (get highest-bid auction)))
+        (if (and (> bid-amount current-highest) 
+                 (< stacks-block-height (get end-height auction)))
+            (begin
+                (map-set auctions property-id
+                    (merge auction 
+                        { highest-bid: bid-amount,
+                          highest-bidder: (some tx-sender) }))
+                (map-set auction-bids
+                    { auction-id: property-id, bidder: tx-sender }
+                    bid-amount)
+                (ok true))
+            err-invalid-amount)))
