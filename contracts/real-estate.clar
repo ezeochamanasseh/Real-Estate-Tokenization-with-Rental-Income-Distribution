@@ -398,3 +398,33 @@
         (* BASE_BONUS_RATE bonus-multiplier)))
 
 
+(define-map token-listings
+    { property-id: uint, seller: principal }
+    { amount: uint, price-per-token: uint })
+
+(define-map token-offers
+    { property-id: uint, seller: principal, buyer: principal }
+    { amount: uint, price-per-token: uint, expiry: uint })
+
+(define-public (list-tokens (property-id uint) (amount uint) (price-per-token uint))
+    (let ((balance (get-token-balance property-id tx-sender)))
+        (if (>= balance amount)
+            (begin
+                (map-set token-listings
+                    { property-id: property-id, seller: tx-sender }
+                    { amount: amount, price-per-token: price-per-token })
+                (ok true))
+            err-invalid-amount)))
+
+
+
+(define-public (accept-offer (property-id uint) (buyer principal))
+    (let ((offer (unwrap! (map-get? token-offers { property-id: property-id, seller: tx-sender, buyer: buyer }) err-not-found))
+          (balance (get-token-balance property-id tx-sender)))
+        (if (and 
+            (>= balance (get amount offer))
+            (< stacks-block-height (get expiry offer)))
+            (begin
+                (try! (transfer-tokens property-id buyer (get amount offer)))
+                (ok true))
+            err-invalid-amount)))
