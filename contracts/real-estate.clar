@@ -364,3 +364,37 @@
                     bid-amount)
                 (ok true))
             err-invalid-amount)))
+
+
+
+(define-map token-locks
+    { property-id: uint, holder: principal }
+    { amount: uint, unlock-height: uint, bonus-rate: uint })
+
+(define-constant MINIMUM_LOCK_BLOCKS u1000)
+(define-constant MAXIMUM_LOCK_BLOCKS u52560)
+(define-constant BASE_BONUS_RATE u10)
+
+(define-public (lock-tokens (property-id uint) (amount uint) (lock-blocks uint))
+    (let (
+        (holder-balance (get-token-balance property-id tx-sender))
+        (bonus-rate (calculate-bonus-rate lock-blocks))
+    )
+        (if (and 
+            (>= holder-balance amount)
+            (>= lock-blocks MINIMUM_LOCK_BLOCKS)
+            (<= lock-blocks MAXIMUM_LOCK_BLOCKS))
+            (begin
+                (map-set token-locks
+                    { property-id: property-id, holder: tx-sender }
+                    { amount: amount,
+                      unlock-height: (+ stacks-block-height lock-blocks),
+                      bonus-rate: bonus-rate })
+                (ok true))
+            err-invalid-amount)))
+
+(define-private (calculate-bonus-rate (lock-blocks uint))
+    (let ((bonus-multiplier (/ lock-blocks MINIMUM_LOCK_BLOCKS)))
+        (* BASE_BONUS_RATE bonus-multiplier)))
+
+
