@@ -428,3 +428,45 @@
                 (try! (transfer-tokens property-id buyer (get amount offer)))
                 (ok true))
             err-invalid-amount)))
+
+
+
+
+(define-map farming-pools uint
+    { total-staked: uint, 
+      reward-per-block: uint,
+      last-update-block: uint,
+      accumulated-reward-per-share: uint })
+
+(define-map farmer-positions
+    { property-id: uint, farmer: principal }
+    { amount: uint, 
+      reward-debt: uint,
+      unclaimed-rewards: uint })
+
+(define-public (create-farming-pool (property-id uint) (reward-per-block uint))
+    (if (is-eq tx-sender contract-owner)
+        (begin
+            (map-set farming-pools property-id
+                { total-staked: u0,
+                  reward-per-block: reward-per-block,
+                  last-update-block: stacks-block-height,
+                  accumulated-reward-per-share: u0 })
+            (ok true))
+        err-owner-only))
+
+(define-public (stake-in-farm (property-id uint) (amount uint))
+    (let ((balance (get-token-balance property-id tx-sender))
+          (pool (unwrap! (map-get? farming-pools property-id) err-not-found))
+          (position (default-to 
+            { amount: u0, reward-debt: u0, unclaimed-rewards: u0 }
+            (map-get? farmer-positions { property-id: property-id, farmer: tx-sender }))))
+        (if (>= balance amount)
+            (begin
+                (map-set farmer-positions
+                    { property-id: property-id, farmer: tx-sender }
+                    { amount: (+ amount (get amount position)),
+                      reward-debt: u0,
+                      unclaimed-rewards: u0 })
+                (ok true))
+            err-invalid-amount)))
