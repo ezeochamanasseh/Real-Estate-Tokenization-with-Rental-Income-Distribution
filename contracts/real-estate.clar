@@ -470,3 +470,130 @@
                       unclaimed-rewards: u0 })
                 (ok true))
             err-invalid-amount)))
+
+(define-constant VALUATION_PRECISION u1000000)
+(define-constant MIN_VALUATION_INTERVAL u144)
+(define-constant MAX_APPRECIATION_RATE u200)
+(define-constant MIN_APPRECIATION_RATE u50)
+
+(define-map property-valuations
+    uint
+    { current-value: uint,
+      last-update: uint,
+      appreciation-rate: uint,
+      valuation-method: (string-ascii 20) })
+
+(define-map valuation-history
+    { property-id: uint, timestamp: uint }
+    { value: uint, method: (string-ascii 20) })
+
+(define-map oracle-operators uint principal)
+(define-data-var operator-count uint u0)
+(define-data-var valuation-counter uint u0)
+
+(define-public (initialize-property-valuation (property-id uint) (initial-value uint) (appreciation-rate uint))
+    (let ((property (unwrap! (map-get? properties property-id) err-not-found)))
+        (if (and (is-eq tx-sender contract-owner)
+                 (>= appreciation-rate MIN_APPRECIATION_RATE)
+                 (<= appreciation-rate MAX_APPRECIATION_RATE))
+            (begin
+                (map-set property-valuations property-id
+                    { current-value: initial-value,
+                      last-update: stacks-block-height,
+                      appreciation-rate: appreciation-rate,
+                      valuation-method: "initial" })
+                (map-set valuation-history
+                    { property-id: property-id, timestamp: stacks-block-height }
+                    { value: initial-value, method: "initial" })
+                (ok true))
+            err-owner-only)))
+
+(define-public (update-property-valuation (property-id uint) (new-value uint) (method (string-ascii 20)))
+    (let ((current-valuation (unwrap! (map-get? property-valuations property-id) err-not-found))
+          (blocks-since-update (- stacks-block-height (get last-update current-valuation))))
+        (if (and (is-authorized-operator tx-sender)
+                 (>= blocks-since-update MIN_VALUATION_INTERVAL))
+            (begin
+                (map-set property-valuations property-id
+                    (merge current-valuation 
+                        { current-value: new-value,
+                          last-update: stacks-block-height,
+                          valuation-method: method }))
+                (map-set valuation-history
+                    { property-id: property-id, timestamp: stacks-block-height }
+                    { value: new-value, method: method })
+                (var-set valuation-counter (+ (var-get valuation-counter) u1))
+                (ok true))
+            err-owner-only)))
+
+(define-public (calculate-time-based-valuation (property-id uint))
+    (let ((valuation (unwrap! (map-get? property-valuations property-id) err-not-found))
+          (blocks-elapsed (- stacks-block-height (get last-update valuation)))
+          (annual-blocks u52560)
+          (current-value (get current-value valuation))
+          (appreciation-rate (get appreciation-rate valuation)))
+        (if (> blocks-elapsed u0)
+            (let ((time-factor (/ (* blocks-elapsed VALUATION_PRECISION) annual-blocks))
+                  (appreciation-factor (/ (* appreciation-rate time-factor) (* u100 VALUATION_PRECISION)))
+                  (new-value (+ current-value (/ (* current-value appreciation-factor) VALUATION_PRECISION))))
+                (ok new-value))
+            (ok current-value))))
+
+(define-public (calculate-income-based-valuation (property-id uint) (annual-rental-income uint) (cap-rate uint))
+    (let ((property (unwrap! (map-get? properties property-id) err-not-found)))
+        (if (and (> annual-rental-income u0) (> cap-rate u0))
+            (let ((property-value (/ (* annual-rental-income u100) cap-rate)))
+                (try! (update-property-valuation property-id property-value "income-approach"))
+                (ok property-value))
+            err-invalid-amount)))
+
+(define-public (add-oracle-operator (operator principal))
+    (if (is-eq tx-sender contract-owner)
+        (let ((current-count (var-get operator-count)))
+            (map-set oracle-operators current-count operator)
+            (var-set operator-count (+ current-count u1))
+            (ok current-count))
+        err-owner-only))
+
+(define-private (is-authorized-operator (operator principal))
+    (or (is-eq operator contract-owner)
+        (is-some (index-of (map get-oracle-operator (list u0 u1 u2 u3 u4)) (some operator)))))
+
+(define-private (get-oracle-operator (index uint))
+    (map-get? oracle-operators index))
+
+(define-read-only (get-property-valuation (property-id uint))
+    (map-get? property-valuations property-id))
+
+(define-read-only (get-valuation-history (property-id uint) (timestamp uint))
+    (map-get? valuation-history { property-id: property-id, timestamp: timestamp }))
+
+(define-read-only (get-token-value (property-id uint))
+    (let ((property (unwrap! (map-get? properties property-id) err-not-found))
+          (valuation (unwrap! (map-get? property-valuations property-id) err-not-found))
+          (total-tokens (get total-tokens property))
+          (property-value (get current-value valuation)))
+        (if (> total-tokens u0)
+            (ok (/ property-value total-tokens))
+            err-invalid-amount)))
+
+;; (define-read-only (get-portfolio-value (holder principal))
+;;     (let ((property-count (var-get total-properties)))
+;;         (fold calculate-holder-property-value 
+;;               (list u0 u1 u2 u3 u4 u5 u6 u7 u8 u9) 
+;;               { holder: holder, total-value: u0, max-properties: property-count })))
+
+;; (define-private (calculate-holder-property-value (property-id uint) (acc { holder: principal, total-value: uint, max-properties: uint }))
+;;     (if (< property-id (get max-properties acc))
+;;         (let (
+;;                 (token-balance (get-token-balance property-id (get holder acc)))
+;;                 (token-value (unwrap! (get-token-value property-id) u0))
+;;              )
+;;             { holder: (get holder acc),
+;;               total-value: (+ (get total-value acc) (* token-balance token-value)),
+;;               max-properties: (get max-properties acc) })
+;;         acc))
+
+(define-public (trigger-valuation-update (property-id uint))
+    (let ((time-based-value (unwrap! (calculate-time-based-valuation property-id) err-invalid-amount)))
+        (update-property-valuation property-id time-based-value "time-based")))
