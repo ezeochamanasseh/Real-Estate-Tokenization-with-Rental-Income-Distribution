@@ -577,22 +577,7 @@
             (ok (/ property-value total-tokens))
             err-invalid-amount)))
 
-;; (define-read-only (get-portfolio-value (holder principal))
-;;     (let ((property-count (var-get total-properties)))
-;;         (fold calculate-holder-property-value 
-;;               (list u0 u1 u2 u3 u4 u5 u6 u7 u8 u9) 
-;;               { holder: holder, total-value: u0, max-properties: property-count })))
 
-;; (define-private (calculate-holder-property-value (property-id uint) (acc { holder: principal, total-value: uint, max-properties: uint }))
-;;     (if (< property-id (get max-properties acc))
-;;         (let (
-;;                 (token-balance (get-token-balance property-id (get holder acc)))
-;;                 (token-value (unwrap! (get-token-value property-id) u0))
-;;              )
-;;             { holder: (get holder acc),
-;;               total-value: (+ (get total-value acc) (* token-balance token-value)),
-;;               max-properties: (get max-properties acc) })
-;;         acc))
 
 (define-public (trigger-valuation-update (property-id uint))
     (let ((time-based-value (unwrap! (calculate-time-based-valuation property-id) err-invalid-amount)))
