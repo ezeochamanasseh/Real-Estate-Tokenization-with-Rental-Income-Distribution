@@ -54,4 +54,14 @@ plan:
             emulated-sender: ST1PQHQKV0RJXZFY1DGX8MNSNYVE3VGZJSRTPGZGM
             path: "contracts\\real-estate.clar"
             clarity-version: 3
+        - emulated-contract-publish:
+            contract-name: investment-pool-manager
+            emulated-sender: ST1PQHQKV0RJXZFY1DGX8MNSNYVE3VGZJSRTPGZGM
+            path: "contracts\\investment-pool-manager.clar"
+            clarity-version: 3
+        - emulated-contract-publish:
+            contract-name: revenue-sharing
+            emulated-sender: ST1PQHQKV0RJXZFY1DGX8MNSNYVE3VGZJSRTPGZGM
+            path: "contracts\\revenue-sharing.clar"
+            clarity-version: 3
       epoch: "3.1"
