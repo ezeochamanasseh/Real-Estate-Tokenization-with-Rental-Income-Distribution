@@ -26,6 +26,15 @@ epoch = 3.1
 [repl.investment-pool-manager]
 passes = ['check_checker']
 
+[contracts.property-analytics]
+path = 'contracts/property-analytics.clar'
+clarity_version = 3
+epoch = 3.1
+[repl.property-analytics]
+passes = ['check_checker']
+
+
+
 [repl.analysis.check_checker]
 strict = false
 trusted_sender = false
